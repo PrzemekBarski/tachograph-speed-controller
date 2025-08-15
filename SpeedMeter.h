@@ -24,7 +24,8 @@ private:
   DFRobot_RTU &modbus;
   uint16_t speed_km_h = 0;
   uint16_t wheelDiameter_mm = 830, minDiameter = 700, maxDiameter = 1600;
-  uint8_t minMotorGain = 30, maxMotorGain = 75, minMotorStart = 20, maxMotorStart = 20;
+  uint8_t minMotorGain = 15, maxMotorGain = 37, minMotorStart = 20, maxMotorStart = 20;
+  uint8_t previousRPS = 0, lowValueCounter = 0;
   uint16_t temporaryWheelDiameter_mm = wheelDiameter_mm;
   unsigned long lastUpdateTime = 0;
   uint16_t editingState = 0;

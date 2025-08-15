@@ -12,6 +12,7 @@ public:
   clearDot(uint8_t displayIndex, uint16_t digit);
   setBlinking(uint8_t displayIndex, uint16_t digit);
   resetBlinking(uint8_t displayIndex, uint16_t digit);
+  clearDisplay(uint8_t displayIndex);
 private:
   uint8_t emptyDigit = 0b00000000;
   uint8_t ledEncodedDigits[10] = { 0b01110111,

@@ -33,6 +33,17 @@ LedDisplay::displayNumber(uint8_t displayIndex, uint16_t number, uint8_t forcedD
   }
 }
 
+LedDisplay::clearDisplay(uint8_t displayIndex)
+{
+  if (displayIndex < 3) {
+    uint8_t digit = displayIndex ? 3 : 4;
+    while (digit)
+    {
+      currentData[displayIndex][--digit] = emptyDigit;
+    }
+  }
+}
+
 LedDisplay::displayDot(uint8_t displayIndex, uint16_t digit)
 {
   currentData[displayIndex][digit] |= 0b00001000;
