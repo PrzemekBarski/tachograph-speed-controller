@@ -21,9 +21,11 @@ LedDisplay::displayNumber(uint8_t displayIndex, uint16_t number, uint8_t forcedD
   uint16_t n = number;
   if (displayIndex < 3) {
     uint8_t digit = displayIndex ? 3 : 4;
+    uint8_t forcedDisplay = digit + 1 - forcedDigitDisplay;
     while (digit)
     {
-      if (n || digit >= (displayIndex ? 2 : 4) || digit >= forcedDigitDisplay + 1) {
+      // if (n || digit >= (displayIndex ? 2 : 4) || digit >= forcedDigitDisplay + 1) {
+        if (n || digit >= forcedDisplay) {
         currentData[displayIndex][--digit] = ledEncodedDigits[n % 10];
         n /= 10;
       } else {

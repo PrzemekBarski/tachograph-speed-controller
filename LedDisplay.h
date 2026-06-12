@@ -15,6 +15,8 @@ public:
   clearDisplay(uint8_t displayIndex);
 private:
   uint8_t emptyDigit = 0b00000000;
+  uint8_t letter_d = 0b01110111;
+  uint8_t letter_i = 0b00000100;
   uint8_t ledEncodedDigits[10] = { 0b01110111,
                                    0b00010100,
                                    0b10110011,

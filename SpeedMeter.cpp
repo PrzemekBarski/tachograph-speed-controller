@@ -22,45 +22,106 @@ SpeedMeter::SpeedMeter(LedDisplay& display, DFRobot_RTU& modbus) :
   display.displayNumber(1, speed_km_h);
 }
 
-SpeedMeter::begin()
+void SpeedMeter::begin()
 {
   buttonDown->begin();
   buttonAction->begin();
   buttonUp->begin();
 
-  if (!digitalRead(9)) {
-    minMotorGain *= 2;
-    maxMotorGain *= 2;
-  }
-
   setDriverSettings();
 }
 
-SpeedMeter::actionBtn()
+void SpeedMeter::actionBtn()
 {
-  editingState = editingState > 3 ? 0 : editingState + 1;
-
-  if (temporaryWheelDiameter_mm < minDiameter)
-    temporaryWheelDiameter_mm = minDiameter;
-  else if (temporaryWheelDiameter_mm > maxDiameter)
-    temporaryWheelDiameter_mm = maxDiameter;
-
-  for (uint8_t i = 0; i < 4; i++) {
-    display.resetBlinking(0, i);
-  }
-
-  if (editingState) {
-    display.displayNumber(0, temporaryWheelDiameter_mm, editingState - 1);
-    display.setBlinking(0, editingState - 1);
+  if (actionBtnHeldFired) {
+    actionBtnHeldFired = false;
   } else {
-    wheelDiameter_mm = temporaryWheelDiameter_mm;
 
-    display.clearDisplay(0);
-    setDriverSettings();
+    // If the value exceeds the limits, change it to the nearest limit
+    if (editingState && editingState < 5) {
+      if (temporaryWheelDiameter_mm < minDiameter)
+        temporaryWheelDiameter_mm = minDiameter;
+      else if (temporaryWheelDiameter_mm > maxDiameter)
+        temporaryWheelDiameter_mm = maxDiameter;
+    } else if (editingState && editingState < 9) {
+      if (temporaryGearboxRatio < 0.3f)
+        temporaryGearboxRatio = 0.3f;
+      else if (temporaryGearboxRatio > 4.0f)
+        temporaryGearboxRatio = 4.0f;
+    }
+
+    // Cycle through editing states: 0 - editing disabled; 1-4 - edit wheel diameter; 5-8 - edit gearbox ratio
+    editingState = editingState >= 8 ? 0 : editingState + 1;
+
+    // Turn off blinking
+    for (uint8_t i = 0; i < 4; i++) {
+      display.resetBlinking(0, i);
+    }
+
+    if (editingState) {
+      if (editingState < 5) {
+        display.displayNumber(0, temporaryWheelDiameter_mm, 5 - editingState);
+        display.setBlinking(0, editingState - 1);
+        display.displayNumber(1, 1);
+      } else {
+        if (editingState == 5) {
+          temporaryGearboxRatio = gearboxRatio;
+          floatToDigitArray(temporaryGearboxRatio, temporaryRatioDigitArray, temporaryRatioDotPosition);
+        }
+
+        display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
+        for (uint8_t i = 0; i < 4; i++) {
+          display.clearDot(0, i);
+        }
+        if (temporaryRatioDotPosition) {
+          display.displayDot(0, 3 - temporaryRatioDotPosition);
+        }
+        display.setBlinking(0, editingState - 5);
+        display.displayNumber(1, 2);
+      }
+    } else {
+      wheelDiameter_mm = temporaryWheelDiameter_mm;
+      gearboxRatio = temporaryGearboxRatio;
+
+      display.clearDisplay(0);
+      setDriverSettings();
+    }
   }
 }
 
-SpeedMeter::intToDigitArray(uint16_t number, uint8_t *array)
+void SpeedMeter::actionBtnHeld()
+{
+  if (editingState >= 5 && editingState <= 8 && !actionBtnHeldFired) {
+    actionBtnHeldFired = true;
+    uint8_t previousDotPosition = temporaryRatioDotPosition;
+    temporaryRatioDotPosition = 8 - editingState;
+    Serial.print("previous dot: ");
+    Serial.println(previousDotPosition);
+    Serial.print("current dot: ");
+    Serial.println(temporaryRatioDotPosition);
+    Serial.println(" ");
+    if (temporaryRatioDotPosition > 3 || temporaryRatioDotPosition == previousDotPosition)
+      temporaryRatioDotPosition = 0;
+
+    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
+    if (temporaryGearboxRatio < 0.3f)
+      temporaryGearboxRatio = 0.3f;
+    else if (temporaryGearboxRatio > 4.0f)
+      temporaryGearboxRatio = 4.0f;
+
+    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
+    for (uint8_t i = 0; i < 4; i++) {
+      display.clearDot(0, i);
+    }
+    if (temporaryRatioDotPosition) {
+      display.displayDot(0, 3 - temporaryRatioDotPosition);
+    }
+    display.setBlinking(0, editingState - 5);
+    display.displayNumber(1, 2);
+  }
+}
+
+void SpeedMeter::intToDigitArray(uint16_t number, uint8_t *array)
 {
   uint8_t digit = 4;
   uint16_t n = number;
@@ -69,6 +130,40 @@ SpeedMeter::intToDigitArray(uint16_t number, uint8_t *array)
   {
     array[--digit] = n % 10;
     n /= 10;
+  }
+}
+
+float SpeedMeter::digitArrayToFloat(uint8_t *array, uint8_t dotPosition)
+{
+  uint16_t number = 0;
+
+  for (uint8_t digit = 0; digit < 4; digit++)
+  {
+    number += array[digit] * round(pow(10, 3 - digit));
+  }
+
+  if (!dotPosition)
+    return float(number);
+
+  return float(number) / pow(10.0f, dotPosition);
+}
+
+void SpeedMeter::floatToDigitArray(float value, uint8_t *array, uint8_t &dotPosition)
+{
+  if (dotPosition > 3)
+    dotPosition = 0;
+
+  uint16_t integerValue = 0;
+  if (dotPosition)
+    integerValue = uint16_t(round(value * pow(10.0f, dotPosition)));
+  else
+    integerValue = uint16_t(round(value));
+
+  uint8_t digit = 4;
+  while (digit)
+  {
+    array[--digit] = integerValue % 10;
+    integerValue /= 10;
   }
 }
 
@@ -84,47 +179,91 @@ uint16_t SpeedMeter::digitArrayToInt(uint8_t *array)
   return number;
 }
 
-SpeedMeter::downBtn()
+void SpeedMeter::downBtn()
 {
-  uint8_t digitArray[4];
+  if (!editingState)
+    return;
 
-  intToDigitArray(temporaryWheelDiameter_mm, digitArray);
+  if (editingState < 5) {
+    uint8_t digitArray[4];
+    intToDigitArray(temporaryWheelDiameter_mm, digitArray);
 
-  if (editingState) {
     if (digitArray[editingState - 1])
       digitArray[editingState - 1] -= 1;
     else if (editingState == 1)
       digitArray[editingState - 1] = 1;
     else
       digitArray[editingState - 1] = 9;
-    
-    temporaryWheelDiameter_mm = digitArrayToInt(digitArray);
 
-    display.displayNumber(0, temporaryWheelDiameter_mm, editingState - 1);
+    temporaryWheelDiameter_mm = digitArrayToInt(digitArray);
+    display.displayNumber(0, temporaryWheelDiameter_mm, 5 - editingState);
     display.setBlinking(0, editingState - 1);
+  } else {
+    uint8_t digitIndex = editingState - 5;
+
+    if (temporaryRatioDigitArray[digitIndex])
+      temporaryRatioDigitArray[digitIndex] -= 1;
+    else
+      temporaryRatioDigitArray[digitIndex] = 9;
+
+    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
+    if (temporaryGearboxRatio < 0.3f)
+      temporaryGearboxRatio = 0.3f;
+    else if (temporaryGearboxRatio > 4.0f)
+      temporaryGearboxRatio = 4.0f;
+    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
+    for (uint8_t i = 0; i < 4; i++) {
+      display.clearDot(0, i);
+    }
+    if (temporaryRatioDotPosition) {
+      display.displayDot(0, 3 - temporaryRatioDotPosition);
+    }
+    display.setBlinking(0, digitIndex);
   }
 }
 
-SpeedMeter::upBtn()
+void SpeedMeter::upBtn()
 {
-  uint8_t digitArray[4];
+  if (!editingState)
+    return;
 
-  intToDigitArray(temporaryWheelDiameter_mm, digitArray);
+  if (editingState < 5) {
+    uint8_t digitArray[4];
+    intToDigitArray(temporaryWheelDiameter_mm, digitArray);
 
-  if (editingState) {
     if (digitArray[editingState - 1] < (editingState == 1 ? 1 : 9))
       digitArray[editingState - 1] += 1;
     else
       digitArray[editingState - 1] = 0;
-    
-    temporaryWheelDiameter_mm = digitArrayToInt(digitArray);
 
-    display.displayNumber(0, temporaryWheelDiameter_mm, editingState - 1);
+    temporaryWheelDiameter_mm = digitArrayToInt(digitArray);
+    display.displayNumber(0, temporaryWheelDiameter_mm, 5 - editingState);
     display.setBlinking(0, editingState - 1);
+  } else {
+    uint8_t digitIndex = editingState - 5;
+
+    if (temporaryRatioDigitArray[digitIndex] < 9)
+      temporaryRatioDigitArray[digitIndex] += 1;
+    else
+      temporaryRatioDigitArray[digitIndex] = 0;
+
+    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
+    if (temporaryGearboxRatio < 0.3f)
+      temporaryGearboxRatio = 0.3f;
+    else if (temporaryGearboxRatio > 4.0f)
+      temporaryGearboxRatio = 4.0f;
+    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
+    for (uint8_t i = 0; i < 4; i++) {
+      display.clearDot(0, i);
+    }
+    if (temporaryRatioDotPosition) {
+      display.displayDot(0, 3 - temporaryRatioDotPosition);
+    }
+    display.setBlinking(0, digitIndex);
   }
 }
 
-SpeedMeter::handle()
+void SpeedMeter::handle()
 {
   unsigned long currentTime = millis();
 
@@ -137,6 +276,9 @@ SpeedMeter::handle()
 
   if (buttonAction->resetClicked())
     actionBtn();
+
+  if (buttonAction->isHeld())
+    actionBtnHeld();
 
   if (buttonUp->resetClicked())
     upBtn();
@@ -160,6 +302,9 @@ SpeedMeter::handle()
 
         // Serial.println(params[3] >> 8);
 
+        uint8_t supplyVoltage10 = params[2] >> 8;
+        voltageMultiplier = 240 / supplyVoltage10;
+
         uint8_t rps10 = params[3] >> 8;
         
         // Filter out suspicious values
@@ -172,34 +317,35 @@ SpeedMeter::handle()
         }
         uint16_t rpm = rps10 * 6;
         float circumference = PI * wheelDiameter_mm;
-        float speed10 = circumference * rpm * 60 / 100000.f;
+        float speed10 = circumference * rpm * 60 / gearboxRatio / 100000.f;
         
         if (speed10 < 1000) {
           speed_km_h = round(speed10);
-          display.displayNumber(1, speed_km_h);
+          display.displayNumber(1, speed_km_h, 2);
           display.displayDot(1, 1);
         } else {
           speed_km_h = round(speed10 / 10);
-          display.displayNumber(1, speed_km_h);
+          display.displayNumber(1, speed_km_h, 2);
           display.clearDot(1, 1);
         }
       }
     } else {
-      display.clearDisplay(1);
+      // display.clearDisplay(1);
     }
 
   }
 }
 
-SpeedMeter::setDriverSettings()
+void SpeedMeter::setDriverSettings()
 {
   uint8_t status[4] = {20, 20, 20, 20};
   uint8_t startRange = maxMotorStart - minMotorStart;
-  uint8_t gainRange = maxMotorGain - minMotorGain;
+  uint8_t maxMotorGainLimited = min((maxMotorGain * gearboxRatio), 80);
+  float gainRange = (maxMotorGainLimited - (minMotorGain * gearboxRatio)) * voltageMultiplier;
   uint16_t diameterRange = maxDiameter - minDiameter;
   float ratio = float(wheelDiameter_mm - minDiameter) / float(diameterRange);
   uint8_t start = maxMotorStart - round(ratio * startRange);
-  uint8_t gain = maxMotorGain - round(ratio * gainRange);
+  uint8_t gain = round(maxMotorGainLimited - (ratio * gainRange));
   uint8_t timeout = 10;
   
   while ((status[0] || status[1]) && timeout) {

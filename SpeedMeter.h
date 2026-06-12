@@ -11,25 +11,38 @@ using Button = AblePullupClickerButton;
 class SpeedMeter {
 public:
   SpeedMeter(LedDisplay& display, DFRobot_RTU& modbus);
-  handle();
-  downBtn();
-  actionBtn();
-  upBtn();
-  begin();
-  setDriverSettings();
-  intToDigitArray(uint16_t number, uint8_t *array);
+  void begin();
+  void handle();
+  void downBtn();
+  void actionBtn();
+  void actionBtnHeld();
+  void upBtn();
+  void setDriverSettings();
+  void intToDigitArray(uint16_t number, uint8_t *array);
   uint16_t digitArrayToInt(uint8_t *array);
+  float digitArrayToFloat(uint8_t *array, uint8_t dotPosition);
 private:
+  void floatToDigitArray(float value, uint8_t *array, uint8_t &dotPosition);
+  void updateRatioDots();
+  void displayEditModeIndicator();
+  void clearDisplay0Dots();
+
   LedDisplay &display;
   DFRobot_RTU &modbus;
+  float voltageMultiplier = 1.0f;
   uint16_t speed_km_h = 0;
   uint16_t wheelDiameter_mm = 830, minDiameter = 700, maxDiameter = 1600;
+  float gearboxRatio = 1.0f;
   uint8_t minMotorGain = 15, maxMotorGain = 37, minMotorStart = 20, maxMotorStart = 20;
   uint8_t previousRPS = 0, lowValueCounter = 0;
   uint16_t temporaryWheelDiameter_mm = wheelDiameter_mm;
+  float temporaryGearboxRatio = gearboxRatio;
+  uint8_t temporaryRatioDigitArray[4] = {0, 0, 0, 0};
+  uint8_t temporaryRatioDotPosition = 0;
   unsigned long lastUpdateTime = 0;
   uint16_t editingState = 0;
   bool firstRun = true;
+  bool actionBtnHeldFired = false;
   Button *buttonDown, *buttonAction, *buttonUp;
 };
 
