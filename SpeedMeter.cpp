@@ -10,7 +10,11 @@ String paramNames[] = { "MB_Current",
                         "MB_I/O_ILIM",
                         "MB_I/O_DISABLE",
                         "MB_PWM",
-                        "MB_Speed2Enable" };
+                        "MB_Speed2Enable",
+                        "unknown",
+                        "unknown",
+                        "unknown",
+                        "unknown" };
 
 SpeedMeter::SpeedMeter(LedDisplay& display, DFRobot_RTU& modbus) :
   display(display), modbus(modbus)
@@ -33,91 +37,49 @@ void SpeedMeter::begin()
 
 void SpeedMeter::actionBtn()
 {
-  if (actionBtnHeldFired) {
-    actionBtnHeldFired = false;
-  } else {
-
-    // If the value exceeds the limits, change it to the nearest limit
-    if (editingState && editingState < 5) {
-      if (temporaryWheelDiameter_mm < minDiameter)
-        temporaryWheelDiameter_mm = minDiameter;
-      else if (temporaryWheelDiameter_mm > maxDiameter)
-        temporaryWheelDiameter_mm = maxDiameter;
-    } else if (editingState && editingState < 9) {
-      if (temporaryGearboxRatio < 0.3f)
-        temporaryGearboxRatio = 0.3f;
-      else if (temporaryGearboxRatio > 4.0f)
-        temporaryGearboxRatio = 4.0f;
-    }
-
-    // Cycle through editing states: 0 - editing disabled; 1-4 - edit wheel diameter; 5-8 - edit gearbox ratio
-    editingState = editingState >= 8 ? 0 : editingState + 1;
-
-    // Turn off blinking
-    for (uint8_t i = 0; i < 4; i++) {
-      display.resetBlinking(0, i);
-    }
-
-    if (editingState) {
-      if (editingState < 5) {
-        display.displayNumber(0, temporaryWheelDiameter_mm, 5 - editingState);
-        display.setBlinking(0, editingState - 1);
-        display.displayNumber(1, 1);
-      } else {
-        if (editingState == 5) {
-          temporaryGearboxRatio = gearboxRatio;
-          floatToDigitArray(temporaryGearboxRatio, temporaryRatioDigitArray, temporaryRatioDotPosition);
-        }
-
-        display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
-        for (uint8_t i = 0; i < 4; i++) {
-          display.clearDot(0, i);
-        }
-        if (temporaryRatioDotPosition) {
-          display.displayDot(0, 3 - temporaryRatioDotPosition);
-        }
-        display.setBlinking(0, editingState - 5);
-        display.displayNumber(1, 2);
-      }
-    } else {
-      wheelDiameter_mm = temporaryWheelDiameter_mm;
-      gearboxRatio = temporaryGearboxRatio;
-
-      display.clearDisplay(0);
-      setDriverSettings();
-    }
-  }
-}
-
-void SpeedMeter::actionBtnHeld()
-{
-  if (editingState >= 5 && editingState <= 8 && !actionBtnHeldFired) {
-    actionBtnHeldFired = true;
-    uint8_t previousDotPosition = temporaryRatioDotPosition;
-    temporaryRatioDotPosition = 8 - editingState;
-    Serial.print("previous dot: ");
-    Serial.println(previousDotPosition);
-    Serial.print("current dot: ");
-    Serial.println(temporaryRatioDotPosition);
-    Serial.println(" ");
-    if (temporaryRatioDotPosition > 3 || temporaryRatioDotPosition == previousDotPosition)
-      temporaryRatioDotPosition = 0;
-
-    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
+  // If the value exceeds the limits, change it to the nearest limit
+  if (editingState && editingState < 5) {
+    if (temporaryWheelDiameter_mm < minDiameter)
+      temporaryWheelDiameter_mm = minDiameter;
+    else if (temporaryWheelDiameter_mm > maxDiameter)
+      temporaryWheelDiameter_mm = maxDiameter;
+  } else if (editingState && editingState < 9) {
     if (temporaryGearboxRatio < 0.3f)
       temporaryGearboxRatio = 0.3f;
-    else if (temporaryGearboxRatio > 4.0f)
-      temporaryGearboxRatio = 4.0f;
+    else if (temporaryGearboxRatio > 3.0f)
+      temporaryGearboxRatio = 3.0f;
+  }
 
-    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
-    for (uint8_t i = 0; i < 4; i++) {
-      display.clearDot(0, i);
+  // Cycle through editing states: 0 - editing disabled; 1-4 - edit wheel diameter; 5-8 - edit gearbox ratio
+  editingState = editingState >= 8 ? 0 : editingState + 1;
+
+  // Turn off blinking
+  for (uint8_t i = 0; i < 4; i++) {
+    display.resetBlinking(0, i);
+  }
+
+  if (editingState) {
+    if (editingState < 5) {
+      display.displayNumber(0, temporaryWheelDiameter_mm, 5 - editingState);
+      display.setBlinking(0, editingState - 1);
+      display.displayNumber(1, 1);
+    } else {
+      if (editingState == 5) {
+        temporaryGearboxRatio = gearboxRatio;
+      }
+
+      floatToDigitArray(temporaryGearboxRatio, temporaryRatioDigitArray, 3);
+      display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), 4);
+      display.displayDot(0, 0);
+      display.setBlinking(0, editingState - 5);
+      display.displayNumber(1, 2);
     }
-    if (temporaryRatioDotPosition) {
-      display.displayDot(0, 3 - temporaryRatioDotPosition);
-    }
-    display.setBlinking(0, editingState - 5);
-    display.displayNumber(1, 2);
+  } else {
+    wheelDiameter_mm = temporaryWheelDiameter_mm;
+    gearboxRatio = temporaryGearboxRatio;
+
+    display.clearDisplay(0);
+    setDriverSettings();
   }
 }
 
@@ -148,7 +110,7 @@ float SpeedMeter::digitArrayToFloat(uint8_t *array, uint8_t dotPosition)
   return float(number) / pow(10.0f, dotPosition);
 }
 
-void SpeedMeter::floatToDigitArray(float value, uint8_t *array, uint8_t &dotPosition)
+void SpeedMeter::floatToDigitArray(float value, uint8_t *array, uint8_t dotPosition)
 {
   if (dotPosition > 3)
     dotPosition = 0;
@@ -206,18 +168,10 @@ void SpeedMeter::downBtn()
     else
       temporaryRatioDigitArray[digitIndex] = 9;
 
-    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
-    if (temporaryGearboxRatio < 0.3f)
-      temporaryGearboxRatio = 0.3f;
-    else if (temporaryGearboxRatio > 4.0f)
-      temporaryGearboxRatio = 4.0f;
-    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
-    for (uint8_t i = 0; i < 4; i++) {
-      display.clearDot(0, i);
-    }
-    if (temporaryRatioDotPosition) {
-      display.displayDot(0, 3 - temporaryRatioDotPosition);
-    }
+    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, 3);
+
+    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), 4);
+    display.displayDot(0, 0);
     display.setBlinking(0, digitIndex);
   }
 }
@@ -247,18 +201,10 @@ void SpeedMeter::upBtn()
     else
       temporaryRatioDigitArray[digitIndex] = 0;
 
-    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, temporaryRatioDotPosition);
-    if (temporaryGearboxRatio < 0.3f)
-      temporaryGearboxRatio = 0.3f;
-    else if (temporaryGearboxRatio > 4.0f)
-      temporaryGearboxRatio = 4.0f;
-    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), max(9 - editingState, temporaryRatioDotPosition + 1));
-    for (uint8_t i = 0; i < 4; i++) {
-      display.clearDot(0, i);
-    }
-    if (temporaryRatioDotPosition) {
-      display.displayDot(0, 3 - temporaryRatioDotPosition);
-    }
+    temporaryGearboxRatio = digitArrayToFloat(temporaryRatioDigitArray, 3);
+
+    display.displayNumber(0, digitArrayToInt(temporaryRatioDigitArray), 4);
+    display.displayDot(0, 0);
     display.setBlinking(0, digitIndex);
   }
 }
@@ -277,9 +223,6 @@ void SpeedMeter::handle()
   if (buttonAction->resetClicked())
     actionBtn();
 
-  if (buttonAction->isHeld())
-    actionBtnHeld();
-
   if (buttonUp->resetClicked())
     upBtn();
 
@@ -293,14 +236,15 @@ void SpeedMeter::handle()
 
       if (!status) {
         // Serial.println("\n\n");
-        // for(uint8_t ParamID = 0; ParamID < 11; ParamID++) {
-        //   Serial.print(paramNames[ParamID]);
+        // for(uint8_t ParamID = 0; ParamID < 13; ParamID++) {
         //   Serial.print(ParamID);
+        //   Serial.print(". ");
+        //   Serial.print(paramNames[ParamID]);
         //   Serial.print(": ");
         //   Serial.println(params[ParamID] >> 8);
         // }
 
-        // Serial.println(params[3] >> 8);
+        // Serial.println(float(params[3]) / float(params[3] >> 8));
 
         uint8_t supplyVoltage10 = params[2] >> 8;
         voltageMultiplier = 240 / supplyVoltage10;
@@ -315,7 +259,7 @@ void SpeedMeter::handle()
           lowValueCounter = 0;
           previousRPS = rps10;
         }
-        uint16_t rpm = rps10 * 6;
+        float rpm = (float(rps10) * 60) / 11.f;
         float circumference = PI * wheelDiameter_mm;
         float speed10 = circumference * rpm * 60 / gearboxRatio / 100000.f;
         
@@ -340,7 +284,7 @@ void SpeedMeter::setDriverSettings()
 {
   uint8_t status[4] = {20, 20, 20, 20};
   uint8_t startRange = maxMotorStart - minMotorStart;
-  uint8_t maxMotorGainLimited = min((maxMotorGain * gearboxRatio), 80);
+  uint8_t maxMotorGainLimited = min((maxMotorGain * gearboxRatio), 75);
   float gainRange = (maxMotorGainLimited - (minMotorGain * gearboxRatio)) * voltageMultiplier;
   uint16_t diameterRange = maxDiameter - minDiameter;
   float ratio = float(wheelDiameter_mm - minDiameter) / float(diameterRange);

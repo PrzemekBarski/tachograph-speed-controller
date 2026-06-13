@@ -15,17 +15,13 @@ public:
   void handle();
   void downBtn();
   void actionBtn();
-  void actionBtnHeld();
   void upBtn();
   void setDriverSettings();
   void intToDigitArray(uint16_t number, uint8_t *array);
   uint16_t digitArrayToInt(uint8_t *array);
   float digitArrayToFloat(uint8_t *array, uint8_t dotPosition);
 private:
-  void floatToDigitArray(float value, uint8_t *array, uint8_t &dotPosition);
-  void updateRatioDots();
-  void displayEditModeIndicator();
-  void clearDisplay0Dots();
+  void floatToDigitArray(float value, uint8_t *array, uint8_t dotPosition);
 
   LedDisplay &display;
   DFRobot_RTU &modbus;
@@ -38,11 +34,9 @@ private:
   uint16_t temporaryWheelDiameter_mm = wheelDiameter_mm;
   float temporaryGearboxRatio = gearboxRatio;
   uint8_t temporaryRatioDigitArray[4] = {0, 0, 0, 0};
-  uint8_t temporaryRatioDotPosition = 0;
   unsigned long lastUpdateTime = 0;
   uint16_t editingState = 0;
   bool firstRun = true;
-  bool actionBtnHeldFired = false;
   Button *buttonDown, *buttonAction, *buttonUp;
 };
 
